@@ -4,9 +4,25 @@
   "description": "Jenny的专属桌面小伙伴 💕",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder --mac"
   },
   "devDependencies": {
-    "electron": "^28.3.0"
+    "electron": "^28.3.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.jenny.desktop-pet",
+    "productName": "Jenny的小伙伴",
+    "files": ["main.js", "pet.html"],
+    "mac": {
+      "category": "public.app-category.entertainment",
+      "target": [
+        { "target": "dmg", "arch": ["arm64"] }
+      ]
+    },
+    "dmg": {
+      "title": "Jenny的小伙伴"
+    }
   }
 }
