@@ -1,0 +1,12 @@
+{
+  "name": "jenny-pet",
+  "version": "1.0.0",
+  "description": "Jenny的专属桌面小伙伴 💕",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^28.3.0"
+  }
+}
