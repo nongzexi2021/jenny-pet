@@ -14,7 +14,7 @@
   "build": {
     "appId": "com.jenny.desktop-pet",
     "productName": "Jenny的小伙伴",
-    "files": ["main.js", "pet.html"],
+    "files": ["main.js", "preload.js", "pet_final.html"],
     "mac": {
       "category": "public.app-category.entertainment",
       "target": [
