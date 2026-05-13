@@ -1,28 +1,34 @@
+
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body {
+html, body {
   background: transparent;
+  overflow: hidden;
+}
+body {
   display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  min-height: 100vh;
+  align-items: center;
+  padding: 8px 0 4px;
   font-family: -apple-system, 'PingFang SC', sans-serif;
   user-select: none;
+  width: 260px;
 }
 
 .top-slot {
-  display: flex; align-items: flex-end;
-  justify-content: center; min-height: 36px; margin-bottom: 3px;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 22px; margin-bottom: 2px; width: 100%;
+  -webkit-app-region: drag;
 }
-.weather-bar { font-size: 11px; color: #ccc; text-align: center; line-height: 1; transition: color 0.5s; }
+.weather-bar { font-size: 11px; color: #aaa; text-align: center; line-height: 1; transition: color 0.5s; }
 .weather-bar.loaded { color: #c2547e; }
 .bubble {
   display: none; background: white; border: 2px solid #f9a8c9;
-  border-radius: 14px; padding: 8px 14px; font-size: 12px; color: #c2547e;
-  text-align: center; max-width: 230px; line-height: 1.5;
+  border-radius: 14px; padding: 7px 12px; font-size: 12px; color: #c2547e;
+  text-align: center; max-width: 220px; line-height: 1.5;
   white-space: pre-line; position: relative;
 }
 .bubble::after {
@@ -32,43 +38,50 @@ body {
 }
 .bubble.show { display: block; }
 
-canvas { cursor: pointer; display: block; }
+canvas { cursor: grab; display: block; -webkit-app-region: drag; }
+canvas:active { cursor: grabbing; }
 
-.timer { font-size: 12px; color: #ddd; text-align: center; margin-top: 2px; line-height: 1; transition: color 0.3s; }
+.timer { font-size: 11px; color: #ddd; text-align: center; margin-top: 2px; line-height: 1; transition: color 0.3s; -webkit-app-region: drag; }
 .timer.focus { color: #e07090; }
 .timer.relax { color: #70b0d8; }
 
-/* 状态面板 */
-.state-panel {
-  display: none; flex-direction: column; gap: 8px;
-  background: white; border: 1.5px solid #f0d0e0; border-radius: 16px;
-  padding: 14px 16px; width: 210px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.10); margin-top: 6px;
+/* 面板区域：收起时高度为0 */
+.panel-area {
+  width: 100%;
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+  max-height: 0;
+  -webkit-app-region: no-drag;
 }
-.state-panel.show { display: flex; }
-.panel-title { font-size: 12px; color: #bbb; text-align: center; margin-bottom: 2px; }
+.panel-area.open { max-height: 500px; }
+
+.state-panel {
+  display: flex; flex-direction: column; gap: 7px;
+  background: white; border: 1.5px solid #f0d0e0; border-radius: 16px;
+  padding: 12px 14px; margin: 6px 10px 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+}
+.panel-title { font-size: 11px; color: #bbb; text-align: center; margin-bottom: 2px; }
 .state-btn {
-  border: 1.5px solid #f0c0d8; border-radius: 12px; padding: 9px 0;
+  border: 1.5px solid #f0c0d8; border-radius: 11px; padding: 8px 0;
   font-size: 13px; font-family: -apple-system,'PingFang SC',sans-serif;
   cursor: pointer; text-align: center; background: #fff9fc; color: #c2547e;
-  transition: background 0.2s, transform 0.1s; width: 100%;
+  transition: background 0.2s; width: 100%;
 }
 .state-btn:hover { background: #ffe0ee; }
 .state-btn:active { transform: scale(0.97); }
 .state-btn.active { background: #f9a8c9; color: white; border-color: #f9a8c9; }
 
-/* 聊天面板 */
 .chat-panel {
-  display: none; flex-direction: column; gap: 8px;
+  display: flex; flex-direction: column; gap: 8px;
   background: white; border: 1.5px solid #f0d0e0; border-radius: 16px;
-  padding: 12px 14px; width: 240px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.10); margin-top: 6px;
+  padding: 12px 14px; margin: 6px 10px 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
 }
-.chat-panel.show { display: flex; }
 .chat-title { font-size: 11px; color: #bbb; text-align: center; }
 .chat-history {
   overflow-y: auto; display: flex; flex-direction: column;
-  gap: 6px; max-height: 200px;
+  gap: 6px; max-height: 180px;
 }
 .chat-msg {
   font-size: 12px; line-height: 1.5; border-radius: 10px;
@@ -76,15 +89,13 @@ canvas { cursor: pointer; display: block; }
 }
 .chat-msg.user { background: #fff0f5; color: #c2547e; align-self: flex-end; border: 1px solid #f9a8c9; }
 .chat-msg.ai   { background: #f8f8f8; color: #444; align-self: flex-start; border: 1px solid #eee; }
-
-/* 确认卡片（日历/备忘录操作确认） */
 .confirm-card {
   background: #fff8fc; border: 1.5px solid #f9a8c9; border-radius: 10px;
-  padding: 8px 10px; font-size: 12px; color: #555; align-self: stretch;
+  padding: 7px 10px; font-size: 12px; color: #555; align-self: stretch;
 }
-.confirm-card .confirm-title { font-weight: bold; color: #c2547e; margin-bottom: 4px; }
+.confirm-card .confirm-title { font-weight: bold; color: #c2547e; margin-bottom: 3px; }
 .confirm-card .confirm-detail { color: #777; font-size: 11px; line-height: 1.6; }
-.confirm-card .confirm-status { color: #4caf50; font-size: 11px; margin-top: 4px; }
+.confirm-card .confirm-status { color: #4caf50; font-size: 11px; margin-top: 3px; }
 .confirm-card .confirm-status.error { color: #e57373; }
 
 .chat-input-row { display: flex; gap: 5px; align-items: center; }
@@ -97,7 +108,6 @@ canvas { cursor: pointer; display: block; }
 .chat-send {
   background: #f9a8c9; border: none; border-radius: 10px;
   padding: 6px 10px; font-size: 12px; color: white; cursor: pointer;
-  font-family: -apple-system,'PingFang SC',sans-serif;
 }
 .chat-send:hover { background: #e07090; }
 
@@ -110,7 +120,6 @@ canvas { cursor: pointer; display: block; }
 }
 .voice-btn.recording { background: #f9a8c9; color: white; animation: pulse 0.8s infinite alternate; }
 @keyframes pulse { from{opacity:1;} to{opacity:0.7;} }
-
 .chat-footer { font-size: 11px; color: #ccc; text-align: center; cursor: pointer; }
 .chat-footer:hover { color: #999; }
 </style>
@@ -125,43 +134,48 @@ canvas { cursor: pointer; display: block; }
 <canvas id="c" width="150" height="150"></canvas>
 <div class="timer" id="timer"></div>
 
-<!-- 状态选择面板 -->
-<div class="state-panel" id="panel">
-  <div class="panel-title">Jenny，今天怎么样？</div>
-  <button class="state-btn" id="btn-focus" onclick="selectState('focus')">📚 专注学习</button>
-  <button class="state-btn" id="btn-relax" onclick="selectState('relax')">🌿 放松休息</button>
-  <button class="state-btn" id="btn-today" onclick="queryToday()">📅 今天的安排</button>
-  <button class="state-btn" id="btn-chat" onclick="openChat()">💬 和我说话</button>
-  <button class="state-btn" id="btn-memo" onclick="openMemo()">📝 语音备忘录</button>
-</div>
+<!-- 面板区域：默认收起，展开时撑高窗口 -->
+<div class="panel-area" id="panel-area">
 
-<!-- 聊天面板（AI对话 + 日历） -->
-<div class="chat-panel" id="chat-panel">
-  <div class="chat-title">✨ 和小伙伴说说吧～</div>
-  <div class="chat-history" id="chat-history"></div>
-  <button class="voice-btn" id="voice-btn"
-    onmousedown="startVoice('chat')" onmouseup="stopVoice('chat')"
-    ontouchstart="startVoice('chat')" ontouchend="stopVoice('chat')">
-    🎤 按住说话
-  </button>
-  <div class="chat-input-row">
-    <input class="chat-input" id="chat-input" placeholder="或者打字..." maxlength="200"
-      onkeydown="if(event.key==='Enter')sendText()" />
-    <button class="chat-send" onclick="sendText()">发送</button>
+  <!-- 状态选择面板 -->
+  <div class="state-panel" id="panel" style="display:none">
+    <div class="panel-title">Jenny，今天怎么样？</div>
+    <button class="state-btn" id="btn-focus" onclick="selectState('focus')">📚 专注学习</button>
+    <button class="state-btn" id="btn-relax" onclick="selectState('relax')">🌿 放松休息</button>
+    <button class="state-btn" id="btn-today" onclick="queryToday()">📅 今天的安排</button>
+    <button class="state-btn" id="btn-chat" onclick="openChat()">💬 和我说话</button>
+    <button class="state-btn" id="btn-memo" onclick="openMemo()">📝 语音备忘录</button>
   </div>
-  <div class="chat-footer" onclick="closeChat()">关闭 ✕</div>
-</div>
 
-<!-- 备忘录面板 -->
-<div class="chat-panel" id="memo-panel">
-  <div class="chat-title">📝 语音备忘录</div>
-  <div class="chat-history" id="memo-history"></div>
-  <button class="voice-btn" id="memo-btn"
-    onmousedown="startVoice('memo')" onmouseup="stopVoice('memo')"
-    ontouchstart="startVoice('memo')" ontouchend="stopVoice('memo')">
-    🎤 按住说话，松开保存
-  </button>
-  <div class="chat-footer" onclick="closeMemo()">关闭 ✕</div>
+  <!-- 聊天面板 -->
+  <div class="chat-panel" id="chat-panel" style="display:none">
+    <div class="chat-title">✨ 和小伙伴说说吧～</div>
+    <div class="chat-history" id="chat-history"></div>
+    <button class="voice-btn" id="voice-btn"
+      onmousedown="startVoice('chat')" onmouseup="stopVoice('chat')"
+      ontouchstart="startVoice('chat')" ontouchend="stopVoice('chat')">
+      🎤 按住说话
+    </button>
+    <div class="chat-input-row">
+      <input class="chat-input" id="chat-input" placeholder="或者打字..." maxlength="200"
+        onkeydown="if(event.key==='Enter')sendText()" />
+      <button class="chat-send" onclick="sendText()">发送</button>
+    </div>
+    <div class="chat-footer" onclick="closeChat()">关闭 ✕</div>
+  </div>
+
+  <!-- 备忘录面板 -->
+  <div class="chat-panel" id="memo-panel" style="display:none">
+    <div class="chat-title">📝 语音备忘录</div>
+    <div class="chat-history" id="memo-history"></div>
+    <button class="voice-btn" id="memo-btn"
+      onmousedown="startVoice('memo')" onmouseup="stopVoice('memo')"
+      ontouchstart="startVoice('memo')" ontouchend="stopVoice('memo')">
+      🎤 按住说话，松开保存
+    </button>
+    <div class="chat-footer" onclick="closeMemo()">关闭 ✕</div>
+  </div>
+
 </div>
 
 <script>
@@ -183,7 +197,7 @@ const ANIM={
   happy:{frames:[7,0,7,0,7],ms:160},
 };
 const MSGS={
-  focus:["Jenny，专注的你真的很美！💡","Jenny，加油！你是最棒的 📚","Jenny，继续！胜利在前方 🔥","Jenny，认真的你闪闪发光 ⭐","Jenny，我在陪着你一起加油！💪"],
+  focus:["Jenny，专注的你真的很美！💡","Jenny，加油！你是最棒的 📚","Jenny，继续！胜利在前方 🔥","Jenny，认真的你闪闪发光 ⭐","Jenny，我在陪着你加油！💪"],
   relax:["Jenny，好好休息，你辛苦了 🌿","Jenny，放松一下吧 ☕","Jenny，深呼吸，享受这一刻 🌸","Jenny，休息是为了走更远哦 🌙"],
   happy:["Jenny，你是世界上最棒的！💖","Jenny，我最喜欢你了！💕","Jenny，你今天也超级美！🌸"],
 };
@@ -200,11 +214,19 @@ let happyTimer=null,bubbleTimer=null,encourageTimer=null;
 let timerStart=null,lastHourNotif=0;
 let weatherCode=null,cityName='',tempC=null;
 let chatHistory=[];
-let curVoiceTarget=null; // 'chat' or 'memo'
+let isRecording=false,mediaRecorder=null,audioChunks=[];
 
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
 const W=canvas.width,H=canvas.height;
+
+// ── 动态调整窗口高度 ──
+function syncWindowSize(){
+  const area=document.getElementById('panel-area');
+  const bodyH=document.body.scrollHeight;
+  const h=Math.max(220, bodyH+20);
+  if(window.electronAPI) window.electronAPI.resizeWindow(h);
+}
 
 // ── 天气 ──
 function getWeatherType(c){
@@ -234,7 +256,9 @@ async function fetchWeather(){
     bar.textContent=`${getWeatherEmoji(type)} ${cityName} · ${tempC}°C · ${getWeatherLabel(weatherCode)}`;
     bar.classList.add('loaded');
     setTimeout(()=>{const p=WEATHER_MSGS[type];showBubble(p[Math.floor(Math.random()*p.length)],4000);},1200);
-  }catch(e){document.getElementById('weather-bar').textContent='🌤️ 天气获取中...';}
+  }catch(e){
+    document.getElementById('weather-bar').textContent='📍 天气获取失败';
+  }
 }
 
 // ── 绘制 ──
@@ -307,53 +331,56 @@ function tickDisplay(){
   }
   requestAnimationFrame(tickDisplay);
 }
-function startTimer(mode){timerStart=Date.now();lastHourNotif=0;document.getElementById('timer').className='timer '+mode;}
+function startTimer(mode){timerStart=Date.now();lastHourNotif=0;}
+
 function scheduleEncourage(){
   clearTimeout(encourageTimer);
   encourageTimer=setTimeout(()=>{
-    const chatOpen=document.getElementById('chat-panel').classList.contains('show');
-    const memoOpen=document.getElementById('memo-panel').classList.contains('show');
-    if(!isHappy&&!chatOpen&&!memoOpen)showBubble(rand(MSGS[curMode]));
+    const anyOpen=['chat-panel','memo-panel'].some(id=>document.getElementById(id).style.display!=='none');
+    if(!isHappy&&!anyOpen)showBubble(rand(MSGS[curMode]));
     scheduleEncourage();
   },(25+Math.random()*20)*1000);
 }
 
 // ── 面板控制 ──
-function hideAll(){
-  document.getElementById('panel').classList.remove('show');
-  document.getElementById('chat-panel').classList.remove('show');
-  document.getElementById('memo-panel').classList.remove('show');
+function showPanel(id){
+  ['panel','chat-panel','memo-panel'].forEach(p=>{
+    document.getElementById(p).style.display = p===id ? 'flex' : 'none';
+  });
+  document.getElementById('panel-area').classList.add('open');
+  // 聊天打开时隐藏"和我说话"按钮
+  document.getElementById('btn-chat').style.display =
+    (id==='chat-panel') ? 'none' : '';
+  setTimeout(syncWindowSize, 50);
 }
+function hidePanels(){
+  ['panel','chat-panel','memo-panel'].forEach(p=>{
+    document.getElementById(p).style.display='none';
+  });
+  document.getElementById('panel-area').classList.remove('open');
+  document.getElementById('btn-chat').style.display='';
+  setTimeout(syncWindowSize, 50);
+}
+
 function togglePanel(){
   const p=document.getElementById('panel');
-  // 聊天打开时，隐藏"和我说话"按钮
-  const chatOpen=document.getElementById('chat-panel').classList.contains('show');
-  document.getElementById('btn-chat').style.display=chatOpen?'none':'';
-  p.classList.toggle('show');
+  const area=document.getElementById('panel-area');
+  if(area.classList.contains('open')&&p.style.display!=='none'){
+    hidePanels();
+  } else {
+    showPanel('panel');
+  }
 }
-function hidePanel(){document.getElementById('panel').classList.remove('show');}
-
-function openChat(){
-  hidePanel();
-  document.getElementById('chat-panel').classList.add('show');
-  document.getElementById('chat-input').focus();
-  // 同步隐藏面板里的"和我说话"按钮
-  document.getElementById('btn-chat').style.display='none';
-}
-function closeChat(){
-  document.getElementById('chat-panel').classList.remove('show');
-  document.getElementById('btn-chat').style.display='';
-}
-
+function openChat(){ showPanel('chat-panel'); document.getElementById('chat-input').focus(); }
+function closeChat(){ hidePanels(); }
 function openMemo(){
-  hidePanel();
-  document.getElementById('memo-panel').classList.add('show');
-  appendMemoMsg('ai','📝 按住按钮开始录音，松开后我会帮你保存到备忘录里～');
+  showPanel('memo-panel');
+  appendMemoMsg('ai','📝 按住按钮开始录音，松开后帮你保存到备忘录～');
 }
-function closeMemo(){document.getElementById('memo-panel').classList.remove('show');}
+function closeMemo(){ hidePanels(); }
 
 function selectState(mode){
-  hidePanel();isHappy=false;clearTimeout(happyTimer);
+  hidePanels();isHappy=false;clearTimeout(happyTimer);
   startAnim(mode);startTimer(mode);scheduleEncourage();
   document.getElementById('btn-focus').classList.toggle('active',mode==='focus');
   document.getElementById('btn-relax').classList.toggle('active',mode==='relax');
@@ -362,26 +389,23 @@ function selectState(mode){
     :rand(["Jenny，好好休息，辛苦啦 🌿","Jenny，享受这段悠闲时光 🌸"]));
 }
 
-// ── 查询今天日程 ──
 async function queryToday(){
-  hidePanel();
-  // 通过 Electron IPC 查询日历
+  hidePanels();
   if(window.electronAPI){
     showBubble('稍等，我去看看今天的安排… 📅',3000);
     try{
       const events=await window.electronAPI.getCalendarEvents();
       if(!events||events.length===0){
-        showBubble('Jenny，今天日历里没有安排哦，\n轻松的一天！🌸',5000);
+        showBubble('Jenny，今天日历里没有安排哦\n轻松的一天！🌸',5000);
       } else {
         openChat();
         const lines=events.map(e=>`• ${e.time||'全天'} ${e.title}`).join('\n');
         appendChatMsg('ai',`Jenny，今天的安排：\n${lines}\n\n加油哦！💪`);
       }
-    }catch(e){showBubble('获取日历失败了，稍后再试试吧 😅',3000);}
+    }catch(e){showBubble('获取日历失败，稍后再试 😅',3000);}
   } else {
-    // 浏览器预览模式 - 模拟数据
     openChat();
-    appendChatMsg('ai','Jenny，今天的安排：\n• 10:00 英语课\n• 14:00 图书馆学习\n• 19:00 和朋友吃饭\n\n很充实的一天！加油 💪');
+    appendChatMsg('ai','Jenny，今天的安排：\n• 10:00 英语课\n• 14:00 图书馆\n\n加油 💪');
   }
 }
 
@@ -394,94 +418,69 @@ canvas.addEventListener('dblclick',()=>{
   clearTimeout(happyTimer);happyTimer=setTimeout(()=>{isHappy=false;startAnim(prev);},2500);
 });
 document.addEventListener('click',e=>{
-  const inPanel=document.getElementById('panel').contains(e.target);
-  const inChat=document.getElementById('chat-panel').contains(e.target);
-  const inMemo=document.getElementById('memo-panel').contains(e.target);
-  if(!inPanel&&!inChat&&!inMemo&&e.target!==canvas)hidePanel();
+  const area=document.getElementById('panel-area');
+  if(!area.contains(e.target)&&e.target!==canvas)hidePanels();
 });
 
-// ── 聊天消息 ──
+// ── 消息 ──
 function appendChatMsg(role,text,id=''){
   const box=document.getElementById('chat-history');
   const div=document.createElement('div');
   div.className=`chat-msg ${role}`;if(id)div.id=id;
-  div.textContent=text;box.appendChild(div);box.scrollTop=box.scrollHeight;return div;
+  div.textContent=text;box.appendChild(div);box.scrollTop=box.scrollHeight;
+  setTimeout(syncWindowSize,50);return div;
 }
 function appendMemoMsg(role,text,id=''){
   const box=document.getElementById('memo-history');
   const div=document.createElement('div');
   div.className=`chat-msg ${role}`;if(id)div.id=id;
-  div.textContent=text;box.appendChild(div);box.scrollTop=box.scrollHeight;return div;
+  div.textContent=text;box.appendChild(div);box.scrollTop=box.scrollHeight;
+  setTimeout(syncWindowSize,50);return div;
 }
-
-// 日历/备忘录确认卡片
-function appendConfirmCard(box, icon, title, detail, status, isError=false){
+function appendConfirmCard(box,icon,title,detail,status,isError=false){
   const card=document.createElement('div');
   card.className='confirm-card';
   card.innerHTML=`<div class="confirm-title">${icon} ${title}</div><div class="confirm-detail">${detail}</div><div class="confirm-status${isError?' error':''}">${status}</div>`;
-  box.appendChild(card);box.scrollTop=box.scrollHeight;
+  box.appendChild(card);box.scrollTop=box.scrollHeight;setTimeout(syncWindowSize,50);
 }
 
-// ── AI 对话（DeepSeek）支持日历意图识别 ──
+// ── AI 对话 ──
 async function sendText(){
   const input=document.getElementById('chat-input');
   const text=input.value.trim();if(!text)return;
   input.value='';await sendToAI(text);
 }
-
 async function sendToAI(text){
   const box=document.getElementById('chat-history');
   appendChatMsg('user',text);
   chatHistory.push({role:'user',content:text});
   if(chatHistory.length>20)chatHistory=chatHistory.slice(-20);
   const typing=appendChatMsg('ai','正在思考…','typing-msg');
-
   const today=new Date();
   const todayStr=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-
   try{
-    const systemPrompt=`你是Jenny的专属桌面小伙伴，可爱温暖，喜欢用emoji，称呼用户为"Jenny"。
-今天日期是 ${todayStr}。
-
-当Jenny说的话包含日历事件（如"明天下午3点开会"、"周五要交作业"等），请用以下JSON格式回复：
-{"type":"calendar","title":"事件名称","date":"YYYY-MM-DD","time":"HH:MM","duration":60,"reply":"给Jenny的话"}
-
-当Jenny说的话是普通聊天，正常回复即可，不超过100字。`;
-
+    const systemPrompt=`你是Jenny的专属桌面小伙伴，可爱温暖，喜欢用emoji，称呼用户为"Jenny"。今天日期是${todayStr}。
+当Jenny说的话包含日历事件（如"明天下午3点开会"），请用JSON回复：{"type":"calendar","title":"事件名","date":"YYYY-MM-DD","time":"HH:MM","duration":60,"reply":"给Jenny的话"}
+普通聊天正常回复，不超过100字。`;
     const resp=await fetch('https://api.deepseek.com/v1/chat/completions',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer sk-696de2c8b23043edbb9f45a5af53483b'},
-      body:JSON.stringify({
-        model:'deepseek-chat',max_tokens:300,
-        messages:[
-          {role:'user',content:systemPrompt},
-          {role:'assistant',content:'好的！我会认真陪伴Jenny的 💕'},
-          ...chatHistory.slice(0,-1),
-          {role:'user',content:text}
-        ]
-      })
+      body:JSON.stringify({model:'deepseek-chat',max_tokens:300,
+        messages:[{role:'user',content:systemPrompt},{role:'assistant',content:'好的！我会认真陪伴Jenny的 💕'},
+          ...chatHistory.slice(0,-1),{role:'user',content:text}]})
     });
     const data=await resp.json();
     if(data.error){typing.remove();appendChatMsg('ai','AI错误：'+data.error.message);return;}
     const raw=data.choices?.[0]?.message?.content||'';
     typing.remove();
-
-    // 尝试解析 JSON（日历意图）
     let parsed=null;
-    try{
-      const jsonMatch=raw.match(/\{[\s\S]*\}/);
-      if(jsonMatch)parsed=JSON.parse(jsonMatch[0]);
-    }catch(e){}
-
+    try{const m=raw.match(/\{[\s\S]*\}/);if(m)parsed=JSON.parse(m[0]);}catch(e){}
     if(parsed&&parsed.type==='calendar'){
-      // 日历事件
-      appendChatMsg('ai',parsed.reply||`好的！帮你记到日历里啦 📅`);
+      appendChatMsg('ai',parsed.reply||'好的！帮你记到日历里啦 📅');
       chatHistory.push({role:'assistant',content:parsed.reply});
       showBubble((parsed.reply||'已加入日历！').slice(0,50),4000);
-      // 写入 Mac 日历
-      await writeCalendar(parsed, box);
+      await writeCalendar(parsed,box);
     } else {
-      // 普通回复
       appendChatMsg('ai',raw);
       chatHistory.push({role:'assistant',content:raw});
       showBubble(raw.length>50?raw.slice(0,50)+'…':raw,4000);
@@ -489,61 +488,50 @@ async function sendToAI(text){
   }catch(e){typing.remove();appendChatMsg('ai','网络出错了，稍后再试试 😅');}
 }
 
-// ── 写入 Mac 日历 ──
-async function writeCalendar(event, box){
+async function writeCalendar(event,box){
   const detail=`${event.date} ${event.time||'全天'} · ${event.title}`;
   if(window.electronAPI){
     try{
       await window.electronAPI.addCalendarEvent(event);
       appendConfirmCard(box,'📅','已加入日历',detail,'✅ 写入成功！');
-    }catch(e){
-      appendConfirmCard(box,'📅','日历事件',detail,'❌ 写入失败：'+e.message,true);
-    }
+    }catch(e){appendConfirmCard(box,'📅','日历事件',detail,'❌ 失败：'+e.message,true);}
   } else {
-    // 浏览器预览：显示卡片
-    appendConfirmCard(box,'📅','日历事件（预览）',detail,'⚠️ 需要 Mac App 才能写入日历');
+    appendConfirmCard(box,'📅','日历事件（预览）',detail,'⚠️ 需要 Mac App 才能写入');
   }
 }
 
-// ── 写入 Mac 备忘录 ──
 async function writeMemo(text){
   const box=document.getElementById('memo-history');
   const now=new Date();
   const dateStr=`${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`;
   const timeStr=`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
   const title=`📝 ${dateStr} Jenny的语音笔记`;
-
   if(window.electronAPI){
     try{
-      await window.electronAPI.addMemoNote({title, time:timeStr, content:text});
+      await window.electronAPI.addMemoNote({title,time:timeStr,content:text});
       appendConfirmCard(box,'📝',title,`[${timeStr}] ${text}`,'✅ 已保存到备忘录！');
-      showBubble(`已帮你记下来啦 📝\n"${text.slice(0,20)}${text.length>20?'…':''}"`,4000);
-    }catch(e){
-      appendConfirmCard(box,'📝','备忘录',text,'❌ 保存失败：'+e.message,true);
-    }
+      showBubble(`记下来啦 📝`,3000);
+    }catch(e){appendConfirmCard(box,'📝','备忘录',text,'❌ 失败：'+e.message,true);}
   } else {
-    // 浏览器预览
-    appendConfirmCard(box,'📝',title,`[${timeStr}] ${text}`,'⚠️ 需要 Mac App 才能保存到备忘录');
-    showBubble(`记下来啦：\n"${text.slice(0,25)}…" 📝`,4000);
+    appendConfirmCard(box,'📝',title,`[${timeStr}] ${text}`,'⚠️ 需要 Mac App 才能保存');
+    showBubble(`记下来啦：\n"${text.slice(0,20)}…" 📝`,4000);
   }
 }
 
-// ── 讯飞语音转文字 ──
-let mediaRecorder=null,audioChunks=[],isRecording=false;
-
+// ── 语音录音（修复：用 OfflineAudioContext 避免 AudioContext 挂起） ──
 async function startVoice(target){
   if(isRecording)return;
-  curVoiceTarget=target;
   try{
-    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    const stream=await navigator.mediaDevices.getUserMedia({audio:{sampleRate:16000,channelCount:1}});
     audioChunks=[];
-    mediaRecorder=new MediaRecorder(stream,{mimeType:'audio/webm'});
+    mediaRecorder=new MediaRecorder(stream);
     mediaRecorder.ondataavailable=e=>{if(e.data.size>0)audioChunks.push(e.data);};
-    mediaRecorder.start();isRecording=true;
+    mediaRecorder.start(100);
+    isRecording=true;
     const btnId=target==='chat'?'voice-btn':'memo-btn';
     const btn=document.getElementById(btnId);
     btn.textContent='🔴 录音中…松开发送';btn.classList.add('recording');
-  }catch(e){showBubble('需要麦克风权限才能录音哦 🎤',3000);}
+  }catch(e){showBubble('需要麦克风权限才能录音 🎤',3000);}
 }
 
 async function stopVoice(target){
@@ -553,9 +541,11 @@ async function stopVoice(target){
   const btn=document.getElementById(btnId);
   btn.textContent=target==='chat'?'🎤 按住说话':'🎤 按住说话，松开保存';
   btn.classList.remove('recording');
-  mediaRecorder.stop();mediaRecorder.stream.getTracks().forEach(t=>t.stop());
-  await new Promise(r=>mediaRecorder.onstop=r);
+  mediaRecorder.stop();
+  mediaRecorder.stream.getTracks().forEach(t=>t.stop());
+  await new Promise(r=>setTimeout(r,200)); // 等最后数据flush
   const blob=new Blob(audioChunks,{type:'audio/webm'});
+  mediaRecorder=null;
   transcribeAudio(blob,target);
 }
 
@@ -564,35 +554,37 @@ async function transcribeAudio(blob,target){
   appendFn('ai','🎤 正在识别…','asr-msg');
   try{
     const arrayBuf=await blob.arrayBuffer();
-    const audioCtx=new AudioContext();
-    const audioBuf=await audioCtx.decodeAudioData(arrayBuf);
-    const targetRate=16000;
-    const srcRate=audioBuf.sampleRate;
-    const srcData=audioBuf.getChannelData(0);
+
+    // 用 OfflineAudioContext 解码并重采样，避免挂起
+    const tmpCtx=new AudioContext();
+    const decoded=await tmpCtx.decodeAudioData(arrayBuf);
+    tmpCtx.close();
+
+    const srcRate=decoded.sampleRate, targetRate=16000;
+    const srcData=decoded.getChannelData(0);
     const ratio=srcRate/targetRate;
     const outLen=Math.floor(srcData.length/ratio);
-    const pcm32=new Float32Array(outLen);
-    for(let i=0;i<outLen;i++){
-      const srcIdx=i*ratio,lo=Math.floor(srcIdx),hi=Math.min(lo+1,srcData.length-1);
-      pcm32[i]=srcData[lo]*(1-(srcIdx-lo))+srcData[hi]*(srcIdx-lo);
-    }
     const pcm16=new Int16Array(outLen);
-    for(let i=0;i<outLen;i++)pcm16[i]=Math.max(-32768,Math.min(32767,pcm32[i]*32768));
+    for(let i=0;i<outLen;i++){
+      const si=i*ratio,lo=Math.floor(si),hi=Math.min(lo+1,srcData.length-1);
+      const v=srcData[lo]*(1-(si-lo))+srcData[hi]*(si-lo);
+      pcm16[i]=Math.max(-32768,Math.min(32767,v*32768));
+    }
     const bytes=new Uint8Array(pcm16.buffer);
     let binary='';const chunk=8192;
     for(let i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode(...bytes.subarray(i,i+chunk));
     const base64=btoa(binary);
 
-    const hostUrl='wss://iat-api.xfyun.cn/v2/iat',host='iat-api.xfyun.cn';
-    const apiKey='7bfc14e018a13b958b287af9c7d9ec89',apiSecret='Yjc4Yzc5YjFkYzg3MmJiYjkwYjViMDNl';
+    // 讯飞鉴权
+    const host='iat-api.xfyun.cn';
     const date=new Date().toUTCString();
     const signStr=`host: ${host}\ndate: ${date}\nGET /v2/iat HTTP/1.1`;
     const enc=new TextEncoder();
-    const key=await crypto.subtle.importKey('raw',enc.encode(apiSecret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+    const key=await crypto.subtle.importKey('raw',enc.encode('Yjc4Yzc5YjFkYzg3MmJiYjkwYjViMDNl'),{name:'HMAC',hash:'SHA-256'},false,['sign']);
     const sig=await crypto.subtle.sign('HMAC',key,enc.encode(signStr));
     const sigB64=btoa(String.fromCharCode(...new Uint8Array(sig)));
-    const auth=btoa(`api_key="${apiKey}", algorithm="hmac-sha256", headers="host date request-line", signature="${sigB64}"`);
-    const wsUrl=`${hostUrl}?authorization=${encodeURIComponent(auth)}&date=${encodeURIComponent(date)}&host=${host}`;
+    const auth=btoa(`api_key="7bfc14e018a13b958b287af9c7d9ec89", algorithm="hmac-sha256", headers="host date request-line", signature="${sigB64}"`);
+    const wsUrl=`wss://${host}/v2/iat?authorization=${encodeURIComponent(auth)}&date=${encodeURIComponent(date)}&host=${host}`;
 
     const ws=new WebSocket(wsUrl);let result='';
     ws.onopen=()=>{
@@ -610,13 +602,19 @@ async function transcribeAudio(blob,target){
         ws.close();
         document.getElementById('asr-msg')?.remove();
         if(result.trim()){
-          if(target==='chat'){sendToAI(result.trim());}
+          if(target==='chat')sendToAI(result.trim());
           else{appendMemoMsg('user',result.trim());writeMemo(result.trim());}
-        }else{appendFn('ai','没听清楚，再说一次吧 🥺');}
+        } else {
+          appendFn('ai','没听清楚，再说一次吧 🥺');
+        }
       }
     };
     ws.onerror=()=>{document.getElementById('asr-msg')?.remove();appendFn('ai','语音识别失败，试试打字吧 😅');};
-  }catch(e){document.getElementById('asr-msg')?.remove();appendFn('ai','语音处理出错了 😅');}
+  }catch(e){
+    console.error('transcribe error:',e);
+    document.getElementById('asr-msg')?.remove();
+    appendFn('ai','语音处理出错了 😅 错误：'+e.message);
+  }
 }
 
 // ── 启动 ──
