@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, session } = require('electron');
 const { exec } = require('child_process');
 const path = require('path');
 
@@ -6,28 +6,50 @@ let mainWindow;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 300,
-    height: 600,
+    width: 260,
+    height: 220,
     transparent: true,
     frame: false,
     alwaysOnTop: true,
     resizable: false,
+    hasShadow: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
+
   mainWindow.loadFile('pet_final.html');
-  // 右下角显示
+
   const { width, height } = require('electron').screen.getPrimaryDisplay().workAreaSize;
-  mainWindow.setPosition(width - 320, height - 620);
+  mainWindow.setPosition(width - 280, height - 240);
+
+  // 地理位置 + 麦克风权限直接允许
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (['geolocation', 'media', 'microphone'].includes(permission)) {
+      callback(true);
+    } else {
+      callback(false);
+    }
+  });
+
+  session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+    return ['geolocation', 'media', 'microphone'].includes(permission);
+  });
 }
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
-// ── 执行 AppleScript 工具函数 ──
+// 动态调整窗口高度（面板展开/收起时调用）
+ipcMain.handle('resize-window', async (event, newHeight) => {
+  if (!mainWindow) return;
+  const { width: sw, height: sh } = require('electron').screen.getPrimaryDisplay().workAreaSize;
+  const bounds = mainWindow.getBounds();
+  mainWindow.setBounds({ x: bounds.x, y: sh - newHeight - 20, width: bounds.width, height: newHeight }, true);
+});
+
 function runAppleScript(script) {
   return new Promise((resolve, reject) => {
     exec(`osascript -e '${script.replace(/'/g, "'\\''")}'`, (err, stdout, stderr) => {
@@ -37,26 +59,19 @@ function runAppleScript(script) {
   });
 }
 
-// ── 写入 Mac 日历 ──
 ipcMain.handle('add-calendar-event', async (event, data) => {
   const { title, date, time, duration = 60 } = data;
-
-  // 解析日期时间
   const [year, month, day] = date.split('-').map(Number);
   let startScript, endScript;
-
   if (time) {
     const [hour, minute] = time.split(':').map(Number);
     startScript = `date "${month}/${day}/${year} ${hour}:${String(minute).padStart(2,'0')}:00"`;
-    // 结束时间 = 开始 + duration 分钟
     const endDate = new Date(year, month-1, day, hour, minute + duration);
     endScript = `date "${endDate.getMonth()+1}/${endDate.getDate()}/${endDate.getFullYear()} ${String(endDate.getHours()).padStart(2,'0')}:${String(endDate.getMinutes()).padStart(2,'0')}:00"`;
   } else {
-    // 全天事件
     startScript = `date "${month}/${day}/${year}"`;
     endScript = `date "${month}/${day}/${year}"`;
   }
-
   const script = `
     tell application "Calendar"
       tell calendar "家庭"
@@ -71,23 +86,14 @@ ipcMain.handle('add-calendar-event', async (event, data) => {
     end tell
     return "success"
   `;
-
   await runAppleScript(script);
-
-  // 系统通知确认
-  new Notification({
-    title: '📅 已加入日历',
-    body: `${title} · ${date} ${time || '全天'}`,
-  }).show();
-
+  new Notification({ title: '📅 已加入日历', body: `${title} · ${date} ${time || '全天'}` }).show();
   return { success: true };
 });
 
-// ── 读取今天的日历事件 ──
 ipcMain.handle('get-calendar-events', async () => {
   const today = new Date();
-  const m = today.getMonth() + 1, d = today.getDate(), y = today.getFullYear();
-
+  const m = today.getMonth()+1, d = today.getDate(), y = today.getFullYear();
   const script = `
     tell application "Calendar"
       set todayStart to date "${m}/${d}/${y} 00:00:00"
@@ -107,27 +113,17 @@ ipcMain.handle('get-calendar-events', async () => {
       return eventList
     end tell
   `;
-
   const result = await runAppleScript(script);
   if (!result) return [];
-
-  // 解析返回结果
-  const events = result.split(', ').map(item => {
+  return result.split(', ').map(item => {
     const parts = item.split('|');
     return { title: parts[0], time: parts[1] };
-  }).filter(e => e.title);
-
-  // 按时间排序
-  events.sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
-  return events;
+  }).filter(e => e.title).sort((a,b) => (a.time||'').localeCompare(b.time||''));
 });
 
-// ── 写入 Mac 备忘录 ──
 ipcMain.handle('add-memo-note', async (event, data) => {
   const { title, time, content } = data;
   const newLine = `[${time}] ${content}`;
-
-  // 先检查今天的备忘录是否存在，存在则追加，不存在则新建
   const checkScript = `
     tell application "Notes"
       set targetNote to missing value
@@ -144,51 +140,35 @@ ipcMain.handle('add-memo-note', async (event, data) => {
       end if
     end tell
   `;
-
   let existingBody = '';
   try {
-    const checkResult = await runAppleScript(checkScript);
-    if (checkResult !== 'notfound') {
-      existingBody = checkResult;
-    }
+    const r = await runAppleScript(checkScript);
+    if (r !== 'notfound') existingBody = r;
   } catch(e) {}
 
   if (existingBody) {
-    // 追加到已有备忘录
-    // 提取纯文本内容（去掉 HTML 标签）
-    const plainExisting = existingBody.replace(/<[^>]+>/g, '').trim();
-    const newBody = plainExisting + '\n' + newLine;
-
-    const updateScript = `
+    const plain = existingBody.replace(/<[^>]+>/g, '').trim();
+    const newBody = (plain + '\n' + newLine).replace(/"/g, '\\"').replace(/\n/g, '\\n');
+    await runAppleScript(`
       tell application "Notes"
         repeat with n in every note of folder "备忘录"
           if name of n is "${title}" then
-            set body of n to "${newBody.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"
+            set body of n to "${newBody}"
             exit repeat
           end if
         end repeat
       end tell
-      return "success"
-    `;
-    await runAppleScript(updateScript);
+    `);
   } else {
-    // 新建备忘录
-    const createScript = `
+    const escaped = newLine.replace(/"/g, '\\"');
+    await runAppleScript(`
       tell application "Notes"
         tell folder "备忘录"
-          make new note with properties {name:"${title}", body:"${newLine}"}
+          make new note with properties {name:"${title}", body:"${escaped}"}
         end tell
       end tell
-      return "success"
-    `;
-    await runAppleScript(createScript);
+    `);
   }
-
-  // 系统通知
-  new Notification({
-    title: '📝 备忘录已保存',
-    body: newLine,
-  }).show();
-
+  new Notification({ title: '📝 备忘录已保存', body: newLine }).show();
   return { success: true };
 });
