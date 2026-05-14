@@ -5,4 +5,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getCalendarEvents: () => ipcRenderer.invoke('get-calendar-events'),
   addMemoNote: (data) => ipcRenderer.invoke('add-memo-note', data),
   resizeWindow: (height) => ipcRenderer.invoke('resize-window', height),
+  moveWindow: (x, y) => ipcRenderer.invoke('move-window', x, y),
+  requestMicrophone: () => ipcRenderer.invoke('request-microphone'),
 });

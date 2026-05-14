@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Notification, session } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, session, systemPreferences } = require('electron');
 const { exec } = require('child_process');
 const path = require('path');
 
@@ -7,7 +7,7 @@ let mainWindow;
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 260,
-    height: 220,
+    height: 250,
     transparent: true,
     frame: false,
     alwaysOnTop: true,
@@ -23,7 +23,7 @@ function createWindow() {
   mainWindow.loadFile('pet_final.html');
 
   const { width, height } = require('electron').screen.getPrimaryDisplay().workAreaSize;
-  mainWindow.setPosition(width - 280, height - 240);
+  mainWindow.setPosition(width - 280, height - 270);
 
   // 地理位置 + 麦克风权限直接允许
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
@@ -42,12 +42,38 @@ function createWindow() {
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
-// 动态调整窗口高度（面板展开/收起时调用）
+// 动态调整窗口高度：默认顶边不动（小人不跳），仅当会超出工作区底部时才向上让位
 ipcMain.handle('resize-window', async (event, newHeight) => {
   if (!mainWindow) return;
-  const { width: sw, height: sh } = require('electron').screen.getPrimaryDisplay().workAreaSize;
   const bounds = mainWindow.getBounds();
-  mainWindow.setBounds({ x: bounds.x, y: sh - newHeight - 20, width: bounds.width, height: newHeight }, true);
+  const { height: sh } = require('electron').screen.getPrimaryDisplay().workAreaSize;
+  let newY = bounds.y;
+  if (newY + newHeight > sh) newY = sh - newHeight;
+  if (newY < 0) newY = 0;
+  mainWindow.setBounds({ x: bounds.x, y: newY, width: bounds.width, height: newHeight }, false);
+});
+
+// 手动拖动窗口
+ipcMain.handle('move-window', (event, x, y) => {
+  if (!mainWindow) return;
+  mainWindow.setPosition(Math.round(x), Math.round(y));
+});
+
+// 请求麦克风权限（触发 macOS 系统授权弹窗）
+ipcMain.handle('request-microphone', async () => {
+  if (process.platform !== 'darwin') return true;
+  const status = systemPreferences.getMediaAccessStatus('microphone');
+  if (status === 'granted') return true;
+  if (status === 'denied' || status === 'restricted') {
+    return { error: 'denied', status };
+  }
+  // 'not-determined' → 弹出系统授权对话框
+  try {
+    const ok = await systemPreferences.askForMediaAccess('microphone');
+    return ok ? true : { error: 'denied', status: 'denied' };
+  } catch (e) {
+    return { error: e.message };
+  }
 });
 
 function runAppleScript(script) {

@@ -19,7 +19,11 @@
       "category": "public.app-category.entertainment",
       "target": [
         { "target": "dmg", "arch": ["arm64"] }
-      ]
+      ],
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Jenny的小伙伴需要麦克风来录语音备忘录和语音聊天 🎤",
+        "NSLocationUsageDescription": "Jenny的小伙伴想根据你的位置显示天气 ☀️"
+      }
     },
     "dmg": {
       "title": "Jenny的小伙伴"

@@ -7,8 +7,10 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
   background: transparent;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
+::-webkit-scrollbar { width: 0; background: transparent; }
 body {
   display: flex; flex-direction: column;
   align-items: center;
@@ -38,8 +40,7 @@ body {
 }
 .bubble.show { display: block; }
 
-canvas { cursor: grab; display: block; -webkit-app-region: drag; }
-canvas:active { cursor: grabbing; }
+canvas { cursor: pointer; display: block; -webkit-app-region: no-drag; }
 
 .timer { font-size: 11px; color: #ddd; text-align: center; margin-top: 2px; line-height: 1; transition: color 0.3s; -webkit-app-region: drag; }
 .timer.focus { color: #e07090; }
@@ -49,11 +50,10 @@ canvas:active { cursor: grabbing; }
 .panel-area {
   width: 100%;
   overflow: hidden;
-  transition: max-height 0.25s ease;
   max-height: 0;
   -webkit-app-region: no-drag;
 }
-.panel-area.open { max-height: 500px; }
+.panel-area.open { max-height: 90vh; overflow: visible; }
 
 .state-panel {
   display: flex; flex-direction: column; gap: 7px;
@@ -131,7 +131,7 @@ canvas:active { cursor: grabbing; }
   <div class="bubble" id="bubble"></div>
 </div>
 
-<canvas id="c" width="150" height="150"></canvas>
+<canvas id="c" width="150" height="180"></canvas>
 <div class="timer" id="timer"></div>
 
 <!-- 面板区域：默认收起，展开时撑高窗口 -->
@@ -242,13 +242,40 @@ function getWeatherLabel(c){
   if([61,63,65].includes(c))return'下雨';if([71,73,75].includes(c))return'下雪';
   if([80,81,82].includes(c))return'阵雨';if([95,96,99].includes(c))return'雷阵雨';return'多云';
 }
+async function getLocationByIP(){
+  const sources=[
+    {name:'ipapi.co',url:'https://ipapi.co/json/',pick:d=>(d.latitude&&d.longitude)?{lat:d.latitude,lon:d.longitude,city:d.city||d.region||''}:null},
+    {name:'ipwho.is',url:'https://ipwho.is/',pick:d=>(d.success&&d.latitude&&d.longitude)?{lat:d.latitude,lon:d.longitude,city:d.city||d.region||''}:null},
+    {name:'ip-api',url:'https://ip-api.com/json/?lang=zh-CN',pick:d=>(d.status==='success'&&d.lat&&d.lon)?{lat:d.lat,lon:d.lon,city:d.city||d.regionName||''}:null},
+    {name:'geojs',url:'https://get.geojs.io/v1/ip/geo.json',pick:d=>(d.latitude&&d.longitude)?{lat:parseFloat(d.latitude),lon:parseFloat(d.longitude),city:d.city||d.region||''}:null},
+  ];
+  const errs=[];
+  for(const s of sources){
+    try{
+      const r=await fetch(s.url);
+      if(!r.ok){errs.push(`${s.name} HTTP ${r.status}`);continue;}
+      const d=await r.json();
+      const res=s.pick(d);
+      if(res){console.log('[IP定位]使用',s.name,res);return res;}
+      errs.push(`${s.name} 返回数据不可用`);
+    }catch(e){errs.push(`${s.name} ${e.message}`);}
+  }
+  console.error('[IP定位]全部失败:',errs);
+  throw new Error('IP定位失败: '+errs.join(' | '));
+}
+
 async function fetchWeather(){
   try{
-    const pos=await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{timeout:8000}));
-    const lat=pos.coords.latitude.toFixed(4),lon=pos.coords.longitude.toFixed(4);
-    const geo=await(await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=zh`)).json();
-    const addr=geo.address||{};
-    cityName=addr.city||addr.town||addr.county||addr.state||'当前位置';
+    const loc=await getLocationByIP();
+    const lat=Number(loc.lat).toFixed(4),lon=Number(loc.lon).toFixed(4);
+    cityName=loc.city||'当前位置';
+    if(!loc.city){
+      try{
+        const geo=await(await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=zh`)).json();
+        const addr=geo.address||{};
+        cityName=addr.city||addr.town||addr.county||addr.state||'当前位置';
+      }catch(e){}
+    }
     const wx=await(await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weathercode&timezone=auto`)).json();
     weatherCode=wx.current.weathercode;tempC=Math.round(wx.current.temperature_2m);
     const type=getWeatherType(weatherCode);
@@ -257,20 +284,23 @@ async function fetchWeather(){
     bar.classList.add('loaded');
     setTimeout(()=>{const p=WEATHER_MSGS[type];showBubble(p[Math.floor(Math.random()*p.length)],4000);},1200);
   }catch(e){
-    document.getElementById('weather-bar').textContent='📍 天气获取失败';
+    console.error('[fetchWeather] 失败:',e);
+    document.getElementById('weather-bar').textContent='📍 '+(e.message||'天气获取失败').slice(0,60);
   }
 }
 
 // ── 绘制 ──
 const rainDrops=Array.from({length:10},()=>({x:Math.random()*W,y:Math.random()*H,spd:1.5+Math.random()*2}));
 const snowFlakes=Array.from({length:8},()=>({x:Math.random()*W,y:Math.random()*H,spd:0.5+Math.random(),sz:2+Math.random()*2}));
+const TOP_PAD=30; // 顶部预留给雨伞/太阳/云等配件
 function draw(){
   const fn=ANIM[curMode].frames[frameIdx%ANIM[curMode].frames.length];
   const img=imgs[fn];if(!img.complete||!img.naturalWidth)return;
   ctx.clearRect(0,0,W,H);
-  const s=Math.min(W/img.naturalWidth,H/img.naturalHeight);
+  const availH=H-TOP_PAD;
+  const s=Math.min(W/img.naturalWidth,availH/img.naturalHeight);
   const dw=img.naturalWidth*s,dh=img.naturalHeight*s;
-  const dx=(W-dw)/2,dy=(H-dh)/2;
+  const dx=(W-dw)/2,dy=TOP_PAD+(availH-dh)/2;
   ctx.drawImage(img,dx,dy,dw,dh);
   if(weatherCode!==null)drawWeatherAccessory(getWeatherType(weatherCode),dx,dy,dw,dh);
 }
@@ -409,8 +439,36 @@ async function queryToday(){
   }
 }
 
+// ── 手动拖动 + 点击/双击识别 ──
 let clickTimer=null;
-canvas.addEventListener('click',()=>{clearTimeout(clickTimer);clickTimer=setTimeout(()=>togglePanel(),220);});
+let dragState=null;        // {sx,sy,offX,offY,moved}
+let lastDragMoved=false;   // mouseup 时为 true 表示发生过拖动，需要吞掉随后的 click
+const DRAG_THRESHOLD=4;
+
+canvas.addEventListener('mousedown',e=>{
+  if(e.button!==0)return;
+  dragState={sx:e.screenX,sy:e.screenY,offX:e.clientX,offY:e.clientY,moved:false};
+  lastDragMoved=false;
+});
+window.addEventListener('mousemove',e=>{
+  if(!dragState)return;
+  const dx=e.screenX-dragState.sx,dy=e.screenY-dragState.sy;
+  if(!dragState.moved&&Math.hypot(dx,dy)<DRAG_THRESHOLD)return;
+  dragState.moved=true;
+  if(window.electronAPI){
+    window.electronAPI.moveWindow(e.screenX-dragState.offX,e.screenY-dragState.offY);
+  }
+});
+window.addEventListener('mouseup',()=>{
+  if(dragState&&dragState.moved)lastDragMoved=true;
+  dragState=null;
+});
+
+canvas.addEventListener('click',e=>{
+  if(lastDragMoved){lastDragMoved=false;e.stopImmediatePropagation();return;}
+  clearTimeout(clickTimer);
+  clickTimer=setTimeout(()=>togglePanel(),220);
+});
 canvas.addEventListener('dblclick',()=>{
   clearTimeout(clickTimer);if(isHappy)return;
   isHappy=true;const prev=curMode;startAnim('happy');
@@ -522,6 +580,13 @@ async function writeMemo(text){
 async function startVoice(target){
   if(isRecording)return;
   try{
+    if(window.electronAPI&&window.electronAPI.requestMicrophone){
+      const res=await window.electronAPI.requestMicrophone();
+      if(res&&res.error==='denied'){
+        showBubble('麦克风被拒，请在「系统设置 → 隐私 → 麦克风」中允许 🎤',5000);
+        return;
+      }
+    }
     const stream=await navigator.mediaDevices.getUserMedia({audio:{sampleRate:16000,channelCount:1}});
     audioChunks=[];
     mediaRecorder=new MediaRecorder(stream);
@@ -531,7 +596,10 @@ async function startVoice(target){
     const btnId=target==='chat'?'voice-btn':'memo-btn';
     const btn=document.getElementById(btnId);
     btn.textContent='🔴 录音中…松开发送';btn.classList.add('recording');
-  }catch(e){showBubble('需要麦克风权限才能录音 🎤',3000);}
+  }catch(e){
+    console.error('[startVoice]',e);
+    showBubble('需要麦克风权限才能录音 🎤\n'+(e.message||''),4000);
+  }
 }
 
 async function stopVoice(target){
